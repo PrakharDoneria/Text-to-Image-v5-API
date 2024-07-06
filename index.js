@@ -201,8 +201,9 @@ app.get('/imagine', async (req, res) => {
             deleteImage(imagePath);
             return res.json({ img: `${SERVER_URL}/images/${timestamp}.png` });
         } else {
-            return res.status(500).json({ error: `Failed to fetch image. Status code: ${response.status}` });
-        }
+            console.error(`Error: Failed to fetch image. Status code: ${response.status}, Status text: ${response.statusText}, Response data: ${JSON.stringify(response.data)}`);
+            return res.status(500).json({ error: `Failed to fetch image. Status code: ${response.status}, Status text: ${response.statusText}` });
+            }
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
