@@ -4,12 +4,12 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import admin from 'firebase-admin';
 import { randomBytes } from 'crypto';
-import cron from 'node-cron';;
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const { Buffer } = require('buffer');
-const sharp = require('sharp');
+import cron from 'node-cron';
+import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { Buffer } from 'buffer';
+import sharp from 'sharp';
 
 const deleteImage = (imagePath) => {
     setTimeout(() => {
