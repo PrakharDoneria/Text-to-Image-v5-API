@@ -160,8 +160,11 @@ app.get('/check/:androidId', async (req, res) => {
     }
 });
 
-app.get('/image', async (req, res) => {
-    const prompt = req.query.p;
+const SERVER_URL = process.env.SERVER_URL; 
+
+app.get('/imagine', async (req, res) => {
+    const prompt = req.query.prompt;
+
     if (!prompt) {
         return res.status(400).json({ error: "No prompt provided" });
     }
@@ -192,11 +195,11 @@ app.get('/image', async (req, res) => {
 
         if (response.status === 200) {
             const imgBuffer = Buffer.from(response.data, 'binary');
-            const timestamp = new Date().toISOString().replace(/[:.-]/g, '');
+            const timestamp = Date.now();
             const imagePath = path.join(__dirname, 'images', `${timestamp}.png`);
             await sharp(imgBuffer).toFile(imagePath);
             deleteImage(imagePath);
-            return res.json({ url: `/images/${timestamp}.png` });
+            return res.json({ img: `${SERVER_URL}/images/${timestamp}.png` });
         } else {
             return res.status(500).json({ error: `Failed to fetch image. Status code: ${response.status}` });
         }
@@ -214,6 +217,7 @@ app.get('/images/:filename', (req, res) => {
         return res.status(404).json({ error: "Image not found" });
     }
 });
+
 
 app.get('/info/:androidId', async (req, res) => {
     try {
