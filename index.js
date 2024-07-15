@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { Buffer } from 'buffer';
 import sharp from 'sharp';
+import cors from 'cors';
 
 const deleteImage = (imagePath) => {
     setTimeout(() => {
@@ -21,6 +22,21 @@ const deleteImage = (imagePath) => {
 
 const app = express();
 app.use(express.json());
+
+const allowedOrigins = ['https://verbo-visions-web.vercel.app/', 'https://html-editor-pro.vercel.app/'];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Na Munna Na ye Prakhar Doneria ka server hai isse bak*hodi nhi'));
+    }
+  }
+};
+
+app.use(cors(corsOptions));
+
 
 function isSameDay(date1, date2) {
     const d1 = new Date(date1);
@@ -58,6 +74,8 @@ const userSchema = new mongoose.Schema({
 });
 
 const User = mongoose.model('User', userSchema);
+const router = express.Router();
+
 
 app.get('/', (req, res) => {
     res.send('Server is running');

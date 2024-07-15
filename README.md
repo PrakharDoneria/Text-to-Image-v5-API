@@ -18,8 +18,8 @@ This is a Node.js application that generates images based on user prompts by int
 1. Clone the repository:
 
     ```bash
-    git clone https://github.com/yourusername/ai-image-generator.git
-    cd ai-image-generator
+    git clone https://github.com/prakhardoneria/Text-to-Image-v5-API.git
+    cd Text-to-Image-v5-API
     ```
 
 2. Install the dependencies:
