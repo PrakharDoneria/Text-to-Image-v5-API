@@ -290,7 +290,6 @@ app.get('/ban/:androidId', async (req, res) => {
     }
 });
 
-
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
 
@@ -318,7 +317,6 @@ app.post('/prompt', async (req, res) => {
         "breast",
         "horny",
         "sexy",
-
     ];
 
     if (blocklist.some(blocked => prompt.toLowerCase().includes(blocked.toLowerCase()))) {
@@ -387,7 +385,6 @@ app.post('/prompt', async (req, res) => {
         res.status(500).json({ error: 'Internal server error. Please try again later.' });
     }
 });
-
 
 
 async function getProLLMResponse(prompt) {
