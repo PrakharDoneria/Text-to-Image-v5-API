@@ -111,6 +111,39 @@ async function checkProxyOrVPN(ipAddress) {
     // Custom logic to check if the IP is from a proxy or VPN
     // Implement as per your requirements
 }
+app.get('/year', async (req, res) => {
+    const androidId = req.query.id;
+
+    if (!androidId) {
+        return res.status(400).json({ error: 'Android ID is required.' });
+    }
+
+    try {
+        const isValidId = await isValidAndroidId(androidId);
+        if (!isValidId) {
+            return res.status(403).json({ error: 'Invalid Android ID.' });
+        }
+
+        let user = await User.findOne({ username: androidId });
+
+        const expirationDate = new Date();
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+
+        if (!user) {
+            user = await User.create({ username: androidId, lastRequestTimestamp: Date.now(), requestsMade: 0, userType: 'PAID', premiumExpiration: expirationDate });
+        } else {
+            user.userType = 'PAID';
+            user.premiumExpiration = expirationDate;
+            await user.save();
+        }
+
+        res.json({ code: 200, message: 'Account upgraded to yearly premium successfully.' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error. Please try again later.' });
+    }
+});
+
 
 app.get('/banlist', async (req, res) => {
     try {
