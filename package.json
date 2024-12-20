@@ -1,7 +1,7 @@
 {
   "name": "nodejs",
   "version": "1.0.0",
-  "description": "",
+  "description": "This is a Node.js application that generates images based on user prompts by interfacing with the Magic Studio AI Art Generator API.",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -23,5 +23,6 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "sharp": "^0.33.4"
-  }
+  },
+  "devDependencies": {}
 }

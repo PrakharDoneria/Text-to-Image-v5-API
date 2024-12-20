@@ -8,6 +8,7 @@ import cron from 'node-cron';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import FormData from 'form-data';
 import { Buffer } from 'buffer';
 import sharp from 'sharp';
 import cors from 'cors';
@@ -323,6 +324,8 @@ app.get('/ban/:androidId', async (req, res) => {
     }
 });
 
+const imgbbApiKey = process.env.IMGBB_API_KEY;
+
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
 
@@ -411,75 +414,56 @@ app.post('/prompt', async (req, res) => {
             await user.save();
         }
 
-        const imageUrl = await getProLLMResponse(prompt);
-        if (imageUrl.error) {
-            return res.status(500).json({ error: imageUrl.error });
+        const urls = [
+            'https://paxsenix.serv00.net/v1/jugger.php',
+            'https://paxsenix.serv00.net/v1/pollinations.php',
+            'https://paxsenix.serv00.net/v1/prodia.php',
+            'https://paxsenix.serv00.net/v1/magicstudio.php'
+        ];
+
+        const randomUrl = urls[Math.floor(Math.random() * urls.length)];
+
+        try {
+            const pollinationsResponse = await axios.get(randomUrl, {
+                params: { text: prompt }
+            });
+
+            if (pollinationsResponse.data.message !== 'success' || !pollinationsResponse.data.ok) {
+                return res.status(400).json({ error: 'Failed to generate image' });
+            }
+
+            const imageUrl = pollinationsResponse.data.url;
+
+            const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+            const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+
+            const formData = new FormData();
+            formData.append('image', imageBuffer, 'image.png');
+
+            const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${imgbbApiKey}`, formData, {
+                headers: formData.getHeaders(),
+            });
+
+            if (imgbbResponse.data.error) {
+                return res.status(500).json({ error: 'Failed to upload image to ImgBB.' });
+            }
+
+            res.json({
+                img: imgbbResponse.data.data.url,
+                app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
+            });
+
+        } catch (error) {
+            console.error('Error while generating or uploading the image:', error);
+            res.status(500).json({ error: 'An error occurred while generating or uploading the image' });
         }
 
-        res.json({ code: 200, url: imageUrl });
     } catch (error) {
         console.error("Internal server error:", error);
         res.status(500).json({ error: 'Internal server error. Please try again later.' });
     }
 });
 
-
-async function getProLLMResponse(prompt) {
-    try {
-        const seedBytes = randomBytes(4);
-        const seed = seedBytes.readUInt32BE();
-
-        const data = {
-            width: 1024,
-            height: 1024,
-            seed: seed,
-            num_images: 1,
-            modelType: process.env.MODEL_TYPE,
-            sampler: 9,
-            cfg_scale: 3,
-            guidance_scale: 3,
-            strength: 1.7,
-            steps: 30,
-            high_noise_frac: 1,
-            negativePrompt: 'ugly, deformed, noisy, blurry, distorted, out of focus, bad anatomy, extra limbs, poorly drawn face, poorly drawn hands, missing fingers',
-            prompt: prompt,
-            hide: false,
-            isPrivate: false,
-            batchId: '0yU1CQbVkr',
-            generateVariants: false,
-            initImageFromPlayground: false,
-            statusUUID: process.env.STATUS_UUID
-        };
-
-        const response = await fetch(process.env.BACKEND_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Cookie': process.env.COOKIES
-            },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) {
-            console.error("Failed to generate LLM response. HTTP status:", response.status);
-            return { error: 'Failed to generate LLM response. Please try again later.' };
-        }
-
-        const json = await response.json();
-
-        if (!json.images || !json.images[0] || !json.images[0].imageKey) {
-            console.error("Failed to parse LLM response:", json);
-            return { error: 'Failed to parse LLM response. Please try again later.' };
-        }
-
-        const imageUrl = `https://images.playground.com/${json.images[0].imageKey}.jpeg`;
-
-        return imageUrl;
-    } catch (error) {
-        console.error("Error generating LLM response:", error);
-        return { error: 'Internal server error. Please try again later.' };
-    }
-}
 
 cron.schedule('0 1 * * *', async () => {
     try {
