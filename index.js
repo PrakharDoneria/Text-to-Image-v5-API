@@ -12,6 +12,7 @@ import FormData from 'form-data';
 import { Buffer } from 'buffer';
 import sharp from 'sharp';
 import cors from 'cors';
+import { Readable } from 'stream';
 import { v2 as cloudinary } from 'cloudinary';
 
 const deleteImage = (imagePath) => {
@@ -458,11 +459,11 @@ app.post('/prompt', async (req, res) => {
                 }
             );
 
-            // Use uploadStream with a buffer
-            const readableStream = require('stream').Readable();
+            const readableStream = new Readable();
             readableStream.push(imageBuffer);
             readableStream.push(null);
             readableStream.pipe(uploadResponse);
+            
 
         } catch (error) {
             console.error('Error while generating or uploading the image:', error);
