@@ -22,7 +22,8 @@
     "mongoose": "^8.4.5",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
-    "sharp": "^0.33.4"
+    "sharp": "^0.33.4",
+    "cloudinary": "^2.5.1"
   },
   "devDependencies": {}
 }

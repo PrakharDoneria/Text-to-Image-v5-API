@@ -12,6 +12,7 @@ import FormData from 'form-data';
 import { Buffer } from 'buffer';
 import sharp from 'sharp';
 import cors from 'cors';
+import { v2 as cloudinary } from 'cloudinary';
 
 const deleteImage = (imagePath) => {
     setTimeout(() => {
@@ -326,6 +327,10 @@ app.get('/ban/:androidId', async (req, res) => {
 
 const imgbbApiKey = process.env.IMGBB_API_KEY;
 
+cloudinary.config({
+    cloudinary_url: process.env.CLOUDINARY_URL
+});
+
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
 
@@ -437,22 +442,27 @@ app.post('/prompt', async (req, res) => {
             const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
             const imageBuffer = Buffer.from(imageResponse.data, 'binary');
 
-            const formData = new FormData();
-            formData.append('image', imageBuffer, 'image.png');
+            // Upload image to Cloudinary
+            const uploadResponse = await cloudinary.uploader.upload_stream(
+                { resource_type: 'image' },
+                (error, result) => {
+                    if (error) {
+                        console.error('Cloudinary upload error:', error);
+                        return res.status(500).json({ error: 'Failed to upload image to Cloudinary.' });
+                    }
+                    return res.json({
+                        url: result.secure_url,
+                        img: result.secure_url,
+                        app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
+                    });
+                }
+            );
 
-            const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${imgbbApiKey}`, formData, {
-                headers: formData.getHeaders(),
-            });
-
-            if (imgbbResponse.data.error) {
-                return res.status(500).json({ error: 'Failed to upload image to ImgBB.' });
-            }
-
-            res.json({
-                url: imgbbResponse.data.data.url,
-                img: imgbbResponse.data.data.url,
-                app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
-            });
+            // Use uploadStream with a buffer
+            const readableStream = require('stream').Readable();
+            readableStream.push(imageBuffer);
+            readableStream.push(null);
+            readableStream.pipe(uploadResponse);
 
         } catch (error) {
             console.error('Error while generating or uploading the image:', error);
@@ -464,6 +474,7 @@ app.post('/prompt', async (req, res) => {
         res.status(500).json({ error: 'Internal server error. Please try again later.' });
     }
 });
+
 
 
 cron.schedule('0 1 * * *', async () => {
