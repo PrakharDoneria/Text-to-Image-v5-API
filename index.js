@@ -449,6 +449,7 @@ app.post('/prompt', async (req, res) => {
             }
 
             res.json({
+                url: imgbbResponse.data.data.url,
                 img: imgbbResponse.data.data.url,
                 app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
             });
