@@ -600,3 +600,25 @@ function extractValue(text, key = null, startStr = null, endStr = '",') {
 }
 
 app.use('/temp/images', express.static(path.join(__dirname, 'temp', 'images')));
+
+// New endpoint to list stored images
+app.get('/temp/images/', (req, res) => {
+    fs.readdir(tempImageDir, (err, files) => {
+        if (err) {
+            console.error("Error reading directory:", err);
+            return res.status(500).json({ error: 'Failed to read directory' });
+        }
+
+        // Filter out non-image files if needed
+        const imageFiles = files.filter(file => {
+            const ext = path.extname(file).toLowerCase();
+            return ['.jpg', '.jpeg', '.png', '.gif'].includes(ext);
+        });
+
+        // Construct URLs for each image
+        const serverURL = process.env.SERVER_URL || 'https://visionary-sliq.onrender.com';
+        const imageUrls = imageFiles.map(file => `${serverURL}/temp/images/${file}`);
+
+        res.json({ images: imageUrls });
+    });
+});
