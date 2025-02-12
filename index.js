@@ -8,9 +8,14 @@ import cron from 'node-cron';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import FormData from 'form-data';
 import { Buffer } from 'buffer';
 import sharp from 'sharp';
 import cors from 'cors';
+import { Readable } from 'stream';
+import { v2 as cloudinary } from 'cloudinary';
+import qs from 'qs';
+import { randomUUID } from 'crypto';
 
 const deleteImage = (imagePath) => {
     setTimeout(() => {
@@ -213,53 +218,6 @@ app.get('/check/:androidId', async (req, res) => {
 
 const SERVER_URL = process.env.SERVER_URL; 
 
-app.get('/imagine', async (req, res) => {
-    const prompt = req.query.prompt;
-
-    if (!prompt) {
-        return res.status(400).json({ error: "No prompt provided" });
-    }
-
-    const url = "https://ai-api.magicstudio.com/api/ai-art-generator";
-
-    const headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Origin": "https://magicstudio.com",
-        "Referer": "https://magicstudio.com/ai-art-generator/",
-    };
-
-    const data = {
-        "prompt": prompt,
-        "output_format": "bytes",
-        "user_profile_id": "null",
-        "anonymous_user_id": "c75c20fe-57af-4d71-86fd-754b82b4bf54",
-        "request_timestamp": Date.now().toString(),
-        "user_is_subscribed": "false",
-        "client_id": "pSgX7WgjukXCBoYwDM8G8GLnRRkvAoJlqa5eAVvj95o"
-    };
-
-    try {
-        const response = await axios.post(url, data, { headers, responseType: 'arraybuffer' });
-
-        if (response.status === 200) {
-            const imgBuffer = Buffer.from(response.data, 'binary');
-            const timestamp = Date.now();
-            const imagePath = path.join(__dirname, 'images', `${timestamp}.png`);
-            await sharp(imgBuffer).toFile(imagePath);
-            deleteImage(imagePath);
-            return res.json({ img: `${SERVER_URL}/images/${timestamp}.png` });
-        } else {
-            console.error(`Error: Failed to fetch image. Status code: ${response.status}, Status text: ${response.statusText}, Response data: ${JSON.stringify(response.data)}`);
-            return res.status(500).json({ error: `Failed to fetch image. Status code: ${response.status}, Status text: ${response.statusText}` });
-            }
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
-    }
-});
-
 app.get('/images/:filename', (req, res) => {
     const filename = req.params.filename;
     const filepath = path.join(__dirname, 'images', filename);
@@ -321,6 +279,12 @@ app.get('/ban/:androidId', async (req, res) => {
         console.error("Error banning user:", error);
         res.status(500).json({ error: 'Internal server error. Please try again later.' });
     }
+});
+
+const imgbbApiKey = process.env.IMGBB_API_KEY;
+
+cloudinary.config({
+    cloudinary_url: process.env.CLOUDINARY_URL
 });
 
 app.post('/prompt', async (req, res) => {
@@ -411,12 +375,51 @@ app.post('/prompt', async (req, res) => {
             await user.save();
         }
 
-        const imageUrl = await getProLLMResponse(prompt);
-        if (imageUrl.error) {
-            return res.status(500).json({ error: imageUrl.error });
+        const urls = [
+            'https://paxsenix.serv00.net/v1/jugger.php',
+            'https://paxsenix.serv00.net/v1/pollinations.php',
+            'https://paxsenix.serv00.net/v1/prodia.php',
+        ];
+
+        const randomUrl = urls[Math.floor(Math.random() * urls.length)];
+
+        try {
+            const pollinationsResponse = await axios.get(randomUrl, {
+                params: { text: prompt }
+            });
+
+             let imageUrl;
+            if (pollinationsResponse.data.message !== 'success' || !pollinationsResponse.data.ok) {
+                 const k = await meta_ai_prompt(prompt);
+                 imageUrl = k.images[0].url;
+                
+            }
+            else {
+            imageUrl = pollinationsResponse.data.url;
+            }
+
+            const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+            const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+
+            // Upload image to Cloudinary directly and send the response
+            cloudinary.uploader.upload(imageBuffer.toString('base64'), { resource_type: 'image', encoding: 'base64' })
+                .then(result => {
+                    res.json({
+                        url: result.secure_url,
+                        img: result.secure_url,
+                        app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
+                    });
+                })
+                .catch(error => {
+                    console.error('Cloudinary upload error:', error);
+                    res.status(500).json({ error: 'Failed to upload image to Cloudinary.' });
+                });
+
+        } catch (error) {
+            console.error('Error while generating or uploading the image:', error);
+            res.status(500).json({ error: 'An error occurred while generating or uploading the image' });
         }
 
-        res.json({ code: 200, url: imageUrl });
     } catch (error) {
         console.error("Internal server error:", error);
         res.status(500).json({ error: 'Internal server error. Please try again later.' });
@@ -424,62 +427,6 @@ app.post('/prompt', async (req, res) => {
 });
 
 
-async function getProLLMResponse(prompt) {
-    try {
-        const seedBytes = randomBytes(4);
-        const seed = seedBytes.readUInt32BE();
-
-        const data = {
-            width: 1024,
-            height: 1024,
-            seed: seed,
-            num_images: 1,
-            modelType: process.env.MODEL_TYPE,
-            sampler: 9,
-            cfg_scale: 3,
-            guidance_scale: 3,
-            strength: 1.7,
-            steps: 30,
-            high_noise_frac: 1,
-            negativePrompt: 'ugly, deformed, noisy, blurry, distorted, out of focus, bad anatomy, extra limbs, poorly drawn face, poorly drawn hands, missing fingers',
-            prompt: prompt,
-            hide: false,
-            isPrivate: false,
-            batchId: '0yU1CQbVkr',
-            generateVariants: false,
-            initImageFromPlayground: false,
-            statusUUID: process.env.STATUS_UUID
-        };
-
-        const response = await fetch(process.env.BACKEND_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Cookie': process.env.COOKIES
-            },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) {
-            console.error("Failed to generate LLM response. HTTP status:", response.status);
-            return { error: 'Failed to generate LLM response. Please try again later.' };
-        }
-
-        const json = await response.json();
-
-        if (!json.images || !json.images[0] || !json.images[0].imageKey) {
-            console.error("Failed to parse LLM response:", json);
-            return { error: 'Failed to parse LLM response. Please try again later.' };
-        }
-
-        const imageUrl = `https://images.playground.com/${json.images[0].imageKey}.jpeg`;
-
-        return imageUrl;
-    } catch (error) {
-        console.error("Error generating LLM response:", error);
-        return { error: 'Internal server error. Please try again later.' };
-    }
-}
 
 cron.schedule('0 1 * * *', async () => {
     try {
@@ -494,3 +441,288 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });
+
+
+async function meta_ai_prompt(message, external_conversation_id) {
+    const ok = await updateCookies("abra_sess=FvyWpf%2FB7egBFhIYDnVWVy1SR3FPaGYwbHRBFszNnPUMAA%3D%3D;datr=upJTZ2-El4IwKttLsg1AGkSz;dpr=1.7004296779632568;wd=423x840;");
+    const authPayload = {
+        fb_dtsg: ok.dtsg,
+        lsd: ok.lsd
+    };
+    const url = `https://www.meta.ai/api/graphql/?fb_dtsg=${ok.dtsg}&lsd=${ok.lsd}`;
+    const externalConversationId = !external_conversation_id ? randomUUID() : external_conversation_id;
+
+    const payload = {
+        ...authPayload,
+        fb_api_caller_class: 'RelayModern',
+        fb_api_req_friendly_name: 'useAbraSendMessageMutation',
+        __user: 0,
+        __a: 1,
+        __req: "1j",
+        __hs: "20109.HYP:abra_pkg.2.1.0.0.0",
+        dpr: 2,
+        __ccg: "GOOD",
+        variables: JSON.stringify({
+            message: { sensitive_string_value: message },
+            externalConversationId: externalConversationId,
+            offlineThreadingId: generateOfflineThreadingId(),
+            suggestedPromptIndex: null,
+            flashPreviewInput: null,
+            promptPrefix: null,
+            entrypoint: 'ABRA__CHAT__TEXT',
+            icebreaker_type: 'TEXT_V2',
+            attachments: [],
+            attachmentsV2: [],
+            activeMediaSets: null,
+            activeCardVersions: [],
+            activeArtifactVersion: null,
+            userUploadEditModeInput: null,
+            reelComposeInput: null,
+            qplJoinId: "f66b4cd9e2f22e8c7",
+            gkAbraArtifactsEnabled: false,
+            model_preference_override: null,
+            __relay_internal__pv__AbraDebugDevOnlyrelayprovider: false,
+            __relay_internal__pv__WebPixelRatiorelayprovider: 2,
+            __relay_internal__pv__AbraPinningConversationsrelayprovider: false,
+            __relay_internal__pv__AbraArtifactsEnabledrelayprovider: false,
+            __relay_internal__pv__AbraSearchInlineReferencesEnabledrelayprovider: true,
+            __relay_internal__pv__AbraArtifactVersionCreationMessagerelayprovider: false,
+            __relay_internal__pv__AbraSearchReferencesHovercardEnabledrelayprovider: true,
+            __relay_internal__pv__AbraCardNavigationCountrelayprovider: true,
+            __relay_internal__pv__AbraDebugDevOnlyrelayprovider: false,
+            __relay_internal__pv__AbraHasNuxTourrelayprovider: true,
+            __relay_internal__pv__AbraQPSidebarNuxTriggerNamerelayprovider: "meta_dot_ai_abra_web_message_actions_sidebar_nux_tour",
+            __relay_internal__pv__AbraSurfaceNuxIDrelayprovider: "12177",
+            __relay_internal__pv__AbraFileUploadsrelayprovider: false,
+            __relay_internal__pv__AbraQPFileUploadTransparencyDisclaimerTriggerNamerelayprovider: "meta_dot_ai_abra_web_file_upload_transparency_disclaimer",
+            __relay_internal__pv__AbraUpsellsKillswitchrelayprovider: true,
+            __relay_internal__pv__AbraIcebreakerImagineFetchCountrelayprovider: 20,
+            __relay_internal__pv__AbraImagineYourselfIcebreakersrelayprovider: false,
+            __relay_internal__pv__AbraEmuReelsIcebreakersrelayprovider: false,
+            __relay_internal__pv__AbraQueryFromQPInfrarelayprovider: false,
+            __relay_internal__pv__AbraArtifactsEditorDiffingrelayprovider: false,
+            __relay_internal__pv__AbraArtifactEditorDebugModerelayprovider: false,
+            __relay_internal__pv__AbraArtifactsRenamingEnabledrelayprovider: false,
+            __relay_internal__pv__AbraArtifactSharingrelayprovider: false,
+            __relay_internal__pv__AbraArtifactEditorSaveEnabledrelayprovider: false,
+            __relay_internal__pv__AbraArtifactEditorDownloadHTMLEnabledrelayprovider: false
+        }),
+        server_timestamps: 'true',
+        doc_id: '7783822248314888',
+    };
+
+    const headers = {
+        'x-fb-lsd': authPayload.lsd,
+        'x-asbd-id': '129477',
+        'content-type': 'application/x-www-form-urlencoded',
+        //'x-fb-friendly-name': 'useAbraSendMessageMutation',
+        'origin': 'https://www.meta.ai',
+        'referer': 'https://www.meta.ai/'
+    };
+
+    headers['cookie'] = ok.cookies;
+
+    try {
+        const response = await axios.post(url, qs.stringify(payload), {
+            headers,
+            responseType: 'text'
+        });
+
+        const rawResponse = response.data;
+        console.log(rawResponse);
+        const lastStreamedResponse = extractLastResponse(rawResponse);
+        fs.writeFileSync(`./meta_ai.json`, JSON.stringify(lastStreamedResponse, null, 2));
+        return extractData(lastStreamedResponse);
+    } catch (error) {
+
+    }
+}
+
+function extractLastResponse(response) {
+    let lastStreamedResponse = null;
+    const lines = response.split('\n');
+    for (const line of lines) {
+        try {
+            const jsonLine = JSON.parse(line);
+            const botResponseMessage = jsonLine?.data?.node?.bot_response_message || {};
+            const chatId = botResponseMessage?.id;
+
+            if (botResponseMessage?.streaming_state === 'OVERALL_DONE') {
+                lastStreamedResponse = jsonLine;
+            }
+        } catch (err) {
+            continue;
+        }
+    }
+    return lastStreamedResponse;
+}
+
+function extractData(jsonLine) {
+    console.log(jsonLine.data.node);
+    const botResponseMessage = jsonLine?.data?.node?.bot_response_message || {};
+    const conversationResponseMessage = jsonLine?.data?.node?.conversation || {};
+    console.log(botResponseMessage);
+    let images = [];
+    let videos = [];
+    if (botResponseMessage.imagine_card) {
+        images = extractMedia(botResponseMessage);
+        videos = animate(botResponseMessage?.imagine_card?.session?.media_sets[0]?.media_set_id, conversationResponseMessage.external_conversation_id);
+    }
+    return {
+        text: botResponseMessage.snippet,
+        reels: botResponseMessage?.reels || {},
+        search_results: botResponseMessage.search_results || {},
+        images,
+        videos,
+        media_set_id: botResponseMessage?.imagine_card?.session?.media_sets[0]?.media_set_id || null,
+        external_conversation_id: conversationResponseMessage.external_conversation_id
+    };
+}
+
+function extractMedia(jsonLine) {
+    const medias = [];
+    const imagineCard = jsonLine?.imagine_card || {};
+    const session = imagineCard?.session || {};
+    const mediaSets = session?.media_sets || [];
+
+    for (const mediaSet of mediaSets) {
+        const imagineMedia = mediaSet?.imagine_media || [];
+        for (const media of imagineMedia) {
+            medias.push({
+                url: media.uri,
+                type: media.media_type,
+                prompt: media.prompt,
+            });
+        }
+    }
+    return medias;
+}
+
+async function animate(media_id, external_conversation_id) {
+    const ok = await updateCookies("abra_sess=FvyWpf%2FB7egBFhIYDnVWVy1SR3FPaGYwbHRBFszNnPUMAA%3D%3D;datr=upJTZ2-El4IwKttLsg1AGkSz;dpr=1.7004296779632568;wd=423x840;");
+    const authPayload = {
+        fb_dtsg: ok.dtsg,
+        lsd: ok.lsd
+    };
+    const url = 'https://www.meta.ai/api/graphql/';
+    const externalConversationId = external_conversation_id;
+
+    const payload = {
+        ...authPayload,
+        fb_api_caller_class: 'RelayModern',
+        fb_api_req_friendly_name: 'useAbraImagineAnimateMutation',
+        variables: JSON.stringify({
+            "input": {
+                "client_mutation_id": "2",
+                "actor_id": "512054858655166",
+                "external_conversation_id": externalConversationId,
+                "image_id": null,
+                "media_set_id": media_id,
+                "media_type": "IMAGE"
+            }
+        }),
+        server_timestamps: 'true',
+        doc_id: '7938413782872932',
+    };
+
+    const headers = {
+        'x-fb-lsd': authPayload.lsd,
+        'x-asbd-id': '129477',
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-fb-friendly-name': 'useAbraImagineAnimateMutation',
+        'origin': 'https://www.meta.ai',
+        'referer': `https://www.meta.ai/c/${externalConversationId}`
+    };
+
+    headers['cookie'] = ok.cookies;
+
+    try {
+        const response = await axios.post(url, qs.stringify(payload), {
+            headers
+        });
+
+        const lastStreamedResponse = response.data;
+        console.log(lastStreamedResponse);
+        const botResponseMessage = lastStreamedResponse?.data || {};
+        const kok = extractAnimatedMedia(botResponseMessage);
+        return kok;
+    } catch (error) {
+
+    }
+}
+
+function extractAnimatedMedia(jsonLine) {
+    const medias = [];
+    const mediaSets = jsonLine?.media_set || {};
+    const imagineMedia = mediaSets?.imagine_media || [];
+    for (const media of imagineMedia) {
+        medias.push({
+            url: media.uri,
+            type: media.media_type,
+            prompt: media.prompt,
+        });
+    }
+    return medias;
+}
+
+function generateOfflineThreadingId() {
+    const MAX_INT = BigInt("0xFFFFFFFFFFFFFFFF");
+    const MASK_22_BITS = BigInt("0x3FFFFF");
+
+    function getCurrentTimestamp() {
+        return BigInt(Date.now());
+    }
+
+    function getRandom64BitInt() {
+        return BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
+    }
+
+    function combineAndMask(timestamp, randomValue) {
+        const shiftedTimestamp = timestamp << BigInt(22);
+        const maskedRandom = randomValue & MASK_22_BITS;
+        return (shiftedTimestamp | maskedRandom) & MAX_INT;
+    }
+
+    const timestamp = getCurrentTimestamp();
+    const randomValue = getRandom64BitInt();
+    const threadingId = combineAndMask(timestamp, randomValue);
+
+    return threadingId.toString();
+}
+
+async function updateCookies(cookies) {
+    const response = await axios.get("https://www.meta.ai/", {
+        headers: {
+            "cookie": cookies,
+            'origin': 'https://www.meta.ai',
+            'referer': 'https://www.meta.ai/',
+            'x-asbd-id': '129477',
+            'User-Agent': 'okhttp/4.3.1'
+        }
+    });
+
+    const text = response.data;
+    const lsd = extractValue(text, null, '"LSD",[],{"token":"', '"}');
+    const dtsg = extractValue(text, null, '"DTSGInitialData",[],{"token":"', '"}');
+    console.log(lsd, dtsg);
+    return {
+        lsd,
+        dtsg,
+        cookies
+    };
+}
+
+function extractValue(text, key = null, startStr = null, endStr = '",') {
+    if (!startStr) {
+        startStr = `${key}":{"value":"`;
+    }
+    const start = text.indexOf(startStr);
+    if (start >= 0) {
+        const adjustedStart = start + startStr.length;
+        const end = text.indexOf(endStr, adjustedStart);
+        if (end >= 0) {
+            return text.substring(adjustedStart, end);
+        }
+    }
+    return null;
+}
