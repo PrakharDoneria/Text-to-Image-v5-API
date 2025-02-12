@@ -1,29 +1,19 @@
 import express from 'express';
-import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import admin from 'firebase-admin';
-import { randomBytes } from 'crypto';
 import cron from 'node-cron';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
-import FormData from 'form-data';
-import { Buffer } from 'buffer';
-import sharp from 'sharp';
 import cors from 'cors';
-import { Readable } from 'stream';
 import { v2 as cloudinary } from 'cloudinary';
 import qs from 'qs';
 import { randomUUID } from 'crypto';
+import { fileURLToPath } from 'url';
 
-const deleteImage = (imagePath) => {
-    setTimeout(() => {
-        fs.unlink(imagePath, (err) => {
-            if (err) console.error(`Error deleting file: ${imagePath}`, err);
-        });
-    }, 120000); 
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
@@ -42,13 +32,10 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-
 function isSameDay(date1, date2) {
     const d1 = new Date(date1);
     const d2 = new Date(date2);
-    return d1.getFullYear() === d2.getFullYear() &&
-        d1.getMonth() === d2.getMonth() &&
-        d1.getDate() === d2.getDate();
+    return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 }
 
 dotenv.config();
@@ -58,16 +45,10 @@ const firebaseConfig = {
     storageBucket: "codepulse-india.appspot.com"
 };
 
-const storage = admin.initializeApp(firebaseConfig).storage();
+admin.initializeApp(firebaseConfig);
 
 const dbURI = process.env.MONGODB_URI;
 mongoose.connect(dbURI);
-
-const db = mongoose.connection;
-db.on("error", console.error.bind(console, "MongoDB connection error:"));
-db.once("open", () => {
-    console.log("Connected to MongoDB");
-});
 
 const userSchema = new mongoose.Schema({
     username: String,
@@ -75,80 +56,45 @@ const userSchema = new mongoose.Schema({
     requestsMade: Number,
     userType: String,
     premiumExpiration: Date,
-    uid: String 
+    uid: String
 });
 
 const User = mongoose.model('User', userSchema);
-const router = express.Router();
-
 
 app.get('/', (req, res) => {
     res.send('Server is running');
 });
 
 async function isValidAndroidId(androidId) {
-    if (typeof androidId !== 'string') {
-        return false;
-    }
-
-    if (androidId.length !== 16) {
-        return false;
-    }
-
+    if (typeof androidId !== 'string') return false;
+    if (androidId.length !== 16) return false;
     for (let i = 0; i < androidId.length; i++) {
         const charCode = androidId.charCodeAt(i);
-        if (!((charCode >= 48 && charCode <= 57) ||
-              (charCode >= 65 && charCode <= 70) ||
-              (charCode >= 97 && charCode <= 102))) {
-            return false;
-        }
+        if (!((charCode >= 48 && charCode <= 57) || (charCode >= 65 && charCode <= 70) || (charCode >= 97 && charCode <= 102))) return false;
     }
-
     return true;
 }
 
-async function isValidIP(ipAddress) {
-    const ipv4Regex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    return ipv4Regex.test(ipAddress);
-}
-
-async function checkProxyOrVPN(ipAddress) {
-    // Custom logic to check if the IP is from a proxy or VPN
-    // Implement as per your requirements
-}
 app.get('/year', async (req, res) => {
     const androidId = req.query.id;
-
-    if (!androidId) {
-        return res.status(400).json({ error: 'Android ID is required.' });
-    }
-
+    if (!androidId) return res.status(400).json({ error: 'Android ID is required.' });
     try {
-        const isValidId = await isValidAndroidId(androidId);
-        if (!isValidId) {
-            return res.status(403).json({ error: 'Invalid Android ID.' });
-        }
-
+        if (!await isValidAndroidId(androidId)) return res.status(403).json({ error: 'Invalid Android ID.' });
         let user = await User.findOne({ username: androidId });
-
         const expirationDate = new Date();
         expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-
-        if (!user) {
-            user = await User.create({ username: androidId, lastRequestTimestamp: Date.now(), requestsMade: 0, userType: 'PAID', premiumExpiration: expirationDate });
-        } else {
+        if (!user) user = await User.create({ username: androidId, lastRequestTimestamp: Date.now(), requestsMade: 0, userType: 'PAID', premiumExpiration: expirationDate });
+        else {
             user.userType = 'PAID';
             user.premiumExpiration = expirationDate;
             await user.save();
         }
-
         res.json({ code: 200, message: 'Account upgraded to yearly premium successfully.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal server error. Please try again later.' });
     }
 });
-
 
 app.get('/banlist', async (req, res) => {
     try {
@@ -163,29 +109,17 @@ app.get('/banlist', async (req, res) => {
 
 app.get('/add', async (req, res) => {
     const androidId = req.query.id;
-
-    if (!androidId) {
-        return res.status(400).json({ error: 'Android ID is required.' });
-    }
-
+    if (!androidId) return res.status(400).json({ error: 'Android ID is required.' });
     try {
-        const isValidId = await isValidAndroidId(androidId);
-        if (!isValidId) {
-            return res.status(403).json({ error: 'Invalid Android ID.' });
-        }
-
+        if (!await isValidAndroidId(androidId)) return res.status(403).json({ error: 'Invalid Android ID.' });
         let user = await User.findOne({ username: androidId });
-
         const expirationDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-        if (!user) {
-            user = await User.create({ username: androidId, lastRequestTimestamp: Date.now(), requestsMade: 0, userType: 'PAID', premiumExpiration: expirationDate });
-        } else {
+        if (!user) user = await User.create({ username: androidId, lastRequestTimestamp: Date.now(), requestsMade: 0, userType: 'PAID', premiumExpiration: expirationDate });
+        else {
             user.userType = 'PAID';
             user.premiumExpiration = expirationDate;
             await user.save();
         }
-
         res.json({ code: 200, message: 'Account upgraded to premium successfully.' });
     } catch (error) {
         console.error(error);
@@ -196,18 +130,9 @@ app.get('/add', async (req, res) => {
 app.get('/check/:androidId', async (req, res) => {
     try {
         const androidId = req.params.androidId;
-
-        const isValidId = await isValidAndroidId(androidId);
-        if (!isValidId) {
-            return res.status(400).json({ error: 'Invalid Android ID.' });
-        }
-
+        if (!await isValidAndroidId(androidId)) return res.status(400).json({ error: 'Invalid Android ID.' });
         const user = await User.findOne({ username: androidId });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found.' });
-        }
-
+        if (!user) return res.status(404).json({ error: 'User not found.' });
         const userType = user.userType === 'PAID' ? 'PAID' : 'FREE';
         res.json({ msg: userType });
     } catch (error) {
@@ -216,33 +141,12 @@ app.get('/check/:androidId', async (req, res) => {
     }
 });
 
-const SERVER_URL = process.env.SERVER_URL; 
-
-app.get('/images/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const filepath = path.join(__dirname, 'images', filename);
-    if (fs.existsSync(filepath)) {
-        return res.sendFile(filepath);
-    } else {
-        return res.status(404).json({ error: "Image not found" });
-    }
-});
-
-
 app.get('/info/:androidId', async (req, res) => {
     try {
         const androidId = req.params.androidId;
-
-        if (!await isValidAndroidId(androidId)) {
-            return res.status(400).json({ error: 'Invalid Android ID format.' });
-        }
-
+        if (!await isValidAndroidId(androidId)) return res.status(400).json({ error: 'Invalid Android ID format.' });
         const user = await User.findOne({ username: androidId });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found.' });
-        }
-
+        if (!user) return res.status(404).json({ error: 'User not found.' });
         res.json({
             username: user.username,
             lastRequestTimestamp: user.lastRequestTimestamp,
@@ -259,21 +163,11 @@ app.get('/info/:androidId', async (req, res) => {
 app.get('/ban/:androidId', async (req, res) => {
     try {
         const androidId = req.params.androidId;
-
-        const isValidId = await isValidAndroidId(androidId);
-        if (!isValidId) {
-            return res.status(400).json({ error: 'Invalid Android ID.' });
-        }
-
+        if (!await isValidAndroidId(androidId)) return res.status(400).json({ error: 'Invalid Android ID.' });
         let user = await User.findOne({ username: androidId });
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found.' });
-        }
-
+        if (!user) return res.status(404).json({ error: 'User not found.' });
         user.userType = 'BANNED';
         await user.save();
-
         res.json({ message: 'User banned successfully.' });
     } catch (error) {
         console.error("Error banning user:", error);
@@ -281,34 +175,35 @@ app.get('/ban/:androidId', async (req, res) => {
     }
 });
 
-const imgbbApiKey = process.env.IMGBB_API_KEY;
-
 cloudinary.config({
     cloudinary_url: process.env.CLOUDINARY_URL
 });
+
+const tempImageDir = path.join(__dirname, 'temp', 'images');
+fs.mkdirSync(tempImageDir, { recursive: true });
 
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
 
     const blocklist = [
-        "prakhardoneria3@gmail.com", 
-        "gmail.com", 
-        "doneria",  
-        "fuck", 
+        "prakhardoneria3@gmail.com",
+        "gmail.com",
+        "doneria",
+        "fuck",
         "gaza",
         "israel",
         "palestine",
         "hamas",
-        "shit", 
-        "bitch", 
-        "asshole", 
-        "bastard", 
-        "dick", 
-        "cunt", 
-        "whore", 
-        "slut", 
-        "nigger", 
-        "faggot", 
+        "shit",
+        "bitch",
+        "asshole",
+        "bastard",
+        "dick",
+        "cunt",
+        "whore",
+        "slut",
+        "nigger",
+        "faggot",
         "motherfucker",
         "piss",
         "twat",
@@ -330,28 +225,20 @@ app.post('/prompt', async (req, res) => {
 
     try {
         const isValidId = androidId ? await isValidAndroidId(androidId) : true;
-        if (!isValidId) {
-            return res.status(403).json({ error: 'Invalid Android ID.' });
-        }
+        if (!isValidId) return res.status(403).json({ error: 'Invalid Android ID.' });
 
         if (uid) {
             const firebaseUser = await admin.auth().getUser(uid);
-            if (!firebaseUser.emailVerified) {
-                return res.status(403).json({ error: 'Email is not verified.' });
-            }
+            if (!firebaseUser.emailVerified) return res.status(403).json({ error: 'Email is not verified.' });
         }
 
         const userByAndroidId = androidId ? await User.findOne({ username: androidId }) : null;
         const userByUid = uid ? await User.findOne({ uid: uid }) : null;
 
         let user;
-        if (userByAndroidId && userByUid) {
-            user = userByUid;
-        } else if (userByAndroidId) {
-            user = userByAndroidId;
-        } else {
-            user = userByUid;
-        }
+        if (userByAndroidId && userByUid) user = userByUid;
+        else if (userByAndroidId) user = userByAndroidId;
+        else user = userByUid;
 
         if (!user) {
             const expirationDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -360,36 +247,36 @@ app.post('/prompt', async (req, res) => {
             if (uid) newUser.uid = uid;
             await User.create(newUser);
         } else {
-            if (user.userType === 'BANNED') {
-                return res.status(403).json({ error: 'User is banned. Upgrade to pro to access the service.' });
-            }
-            if (user.userType === 'FREE' && user.requestsMade >= 3) {
-                return res.status(403).json({ error: 'Daily limit exceeded for free users. Upgrade to pro for unlimited access.' });
-            }
+            if (user.userType === 'BANNED') return res.status(403).json({ error: 'User is banned. Upgrade to pro to access the service.' });
+            if (user.userType === 'FREE' && user.requestsMade >= 3) return res.status(403).json({ error: 'Daily limit exceeded for free users. Upgrade to pro for unlimited access.' });
             const now = Date.now();
-            if (user.lastRequestTimestamp && !isSameDay(now, user.lastRequestTimestamp)) {
-                user.requestsMade = 0;
-            }
+            if (user.lastRequestTimestamp && !isSameDay(now, user.lastRequestTimestamp)) user.requestsMade = 0;
             user.requestsMade++;
             user.lastRequestTimestamp = now;
             await user.save();
         }
 
-        //  Remove Serv00 logic
         try {
             const metaAiResponse = await meta_ai_prompt(prompt);
-            if (!metaAiResponse || !metaAiResponse.images || metaAiResponse.images.length === 0) {
-                return res.status(500).json({ error: 'Failed to generate image with Meta AI.' });
-            }
+            if (!metaAiResponse || !metaAiResponse.images || metaAiResponse.images.length === 0) return res.status(500).json({ error: 'Failed to generate image with Meta AI.' });
 
             const imageUrl = metaAiResponse.images[0].url;
-
             const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
             const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+            const uniqueFilename = `${randomUUID()}.jpg`;
+            const tempFilePath = path.join(tempImageDir, uniqueFilename);
 
-            // Upload image to Cloudinary directly and send the response
-            cloudinary.uploader.upload(imageBuffer.toString('base64'), { resource_type: 'image', encoding: 'base64' })
+            fs.writeFileSync(tempFilePath, imageBuffer);
+
+            const serverURL = process.env.SERVER_URL || 'https://visionary-sliq.onrender.com';
+            const cloudinaryImageUrl = `${serverURL}/temp/images/${uniqueFilename}`;
+
+            cloudinary.uploader.upload(cloudinaryImageUrl, { resource_type: 'image' })
                 .then(result => {
+                    fs.unlink(tempFilePath, (unlinkError) => {
+                        if (unlinkError) console.warn("Error deleting temporary file:", unlinkError);
+                    });
+
                     res.json({
                         url: result.secure_url,
                         img: result.secure_url,
@@ -398,6 +285,9 @@ app.post('/prompt', async (req, res) => {
                 })
                 .catch(error => {
                     console.error('Cloudinary upload error:', error);
+                    fs.unlink(tempFilePath, (unlinkError) => {
+                        if (unlinkError) console.warn("Error deleting temporary file after failed upload:", unlinkError);
+                    });
                     res.status(500).json({ error: 'Failed to upload image to Cloudinary.' });
                 });
 
@@ -412,8 +302,6 @@ app.post('/prompt', async (req, res) => {
     }
 });
 
-
-
 cron.schedule('0 1 * * *', async () => {
     try {
         await User.updateMany({}, { $set: { requestsMade: 0 } });
@@ -427,7 +315,6 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });
-
 
 async function meta_ai_prompt(message, external_conversation_id) {
     const ok = await updateCookies("datr=p5xIZ0uIlx7zFlyuwDTOuyuG; abra_sess=Ft7ex9mulJUBFlIYDnJrTXZHdFVyeVRCU2NRFuLyxPQMAA%3D%3D; wd=1024x1366;");
@@ -501,7 +388,6 @@ async function meta_ai_prompt(message, external_conversation_id) {
         'x-fb-lsd': authPayload.lsd,
         'x-asbd-id': '129477',
         'content-type': 'application/x-www-form-urlencoded',
-        //'x-fb-friendly-name': 'useAbraSendMessageMutation',
         'origin': 'https://www.meta.ai',
         'referer': 'https://www.meta.ai/'
     };
@@ -712,3 +598,5 @@ function extractValue(text, key = null, startStr = null, endStr = '",') {
     }
     return null;
 }
+
+app.use('/temp/images', express.static(path.join(__dirname, 'temp', 'images')));
