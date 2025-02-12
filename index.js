@@ -375,28 +375,14 @@ app.post('/prompt', async (req, res) => {
             await user.save();
         }
 
-        const urls = [
-            'https://paxsenix.serv00.net/v1/jugger.php',
-            'https://paxsenix.serv00.net/v1/pollinations.php',
-            'https://paxsenix.serv00.net/v1/prodia.php',
-        ];
-
-        const randomUrl = urls[Math.floor(Math.random() * urls.length)];
-
+        //  Remove Serv00 logic
         try {
-            const pollinationsResponse = await axios.get(randomUrl, {
-                params: { text: prompt }
-            });
+            const metaAiResponse = await meta_ai_prompt(prompt);
+            if (!metaAiResponse || !metaAiResponse.images || metaAiResponse.images.length === 0) {
+                return res.status(500).json({ error: 'Failed to generate image with Meta AI.' });
+            }
 
-             let imageUrl;
-            if (pollinationsResponse.data.message !== 'success' || !pollinationsResponse.data.ok) {
-                 const k = await meta_ai_prompt(prompt);
-                 imageUrl = k.images[0].url;
-                
-            }
-            else {
-            imageUrl = pollinationsResponse.data.url;
-            }
+            const imageUrl = metaAiResponse.images[0].url;
 
             const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
             const imageBuffer = Buffer.from(imageResponse.data, 'binary');
