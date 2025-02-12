@@ -11,6 +11,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import qs from 'qs';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
+import jimp from 'jimp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -182,6 +183,42 @@ cloudinary.config({
 const tempImageDir = path.join(__dirname, 'temp', 'images');
 fs.mkdirSync(tempImageDir, { recursive: true });
 
+async function addLogo(inputImagePath, logoImagePath, outputImagePath) {
+  try {
+    const image = await jimp.read(inputImagePath);
+    const logo = await jimp.read(logoImagePath);
+
+    const logoWidth = 100;
+    const logoHeight = jimp.AUTO;
+    logo.resize(logoWidth, logoHeight);
+
+    const x = image.getWidth() - logo.getWidth() - 10;
+    const y = image.getHeight() - logo.getHeight() - 10;
+
+    const backgroundColor = 0x745c4f;
+    const watermarkWidth = 60;
+    const watermarkHeight = 20;
+    const watermarkX = image.getWidth() - watermarkWidth - 5;
+    const watermarkY = image.getHeight() - watermarkHeight - 5;
+
+    const rectangle = new jimp(watermarkWidth, watermarkHeight, backgroundColor);
+
+    image.composite(rectangle, watermarkX, watermarkY);
+
+    image.composite(logo, x, y, {
+      mode: jimp.BLEND_SOURCE_OVER,
+      opacitySource: 1,
+      opacityDest: 1
+    });
+
+    await image.writeAsync(outputImagePath);
+    console.log('Logo added successfully!');
+  } catch (err) {
+    console.error('Error adding logo:', err);
+    throw err;
+  }
+}
+
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
 
@@ -265,31 +302,68 @@ app.post('/prompt', async (req, res) => {
             const imageBuffer = Buffer.from(imageResponse.data, 'binary');
             const uniqueFilename = `${randomUUID()}.jpg`;
             const tempFilePath = path.join(tempImageDir, uniqueFilename);
+            const finalFilePath = path.join(tempImageDir, `final_${uniqueFilename}`);
 
             fs.writeFileSync(tempFilePath, imageBuffer);
 
-            const serverURL = process.env.SERVER_URL || 'https://visionary-sliq.onrender.com';
-            const cloudinaryImageUrl = `${serverURL}/temp/images/${uniqueFilename}`;
+            const logoImagePath = path.join(__dirname, 'assets', 'logo.png');
+            try {
+              await addLogo(tempFilePath, logoImagePath, finalFilePath);
 
-            cloudinary.uploader.upload(cloudinaryImageUrl, { resource_type: 'image' })
-                .then(result => {
-                    fs.unlink(tempFilePath, (unlinkError) => {
-                        if (unlinkError) console.warn("Error deleting temporary file:", unlinkError);
-                    });
+              cloudinary.uploader.upload(finalFilePath, { resource_type: 'image' })
+                  .then(result => {
+                      fs.unlink(tempFilePath, (unlinkError) => {
+                          if (unlinkError) console.warn("Error deleting temporary file:", unlinkError);
+                      });
+                      fs.unlink(finalFilePath, (unlinkError) => {
+                          if (unlinkError) console.warn("Error deleting final file:", unlinkError);
+                      });
 
-                    res.json({
-                        url: result.secure_url,
-                        img: result.secure_url,
-                        app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
-                    });
-                })
-                .catch(error => {
-                    console.error('Cloudinary upload error:', error);
-                    fs.unlink(tempFilePath, (unlinkError) => {
-                        if (unlinkError) console.warn("Error deleting temporary file after failed upload:", unlinkError);
-                    });
-                    res.status(500).json({ error: 'Failed to upload image to Cloudinary.' });
-                });
+                      res.json({
+                          url: result.secure_url,
+                          img: result.secure_url,
+                          app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
+                      });
+                  })
+                  .catch(error => {
+                      console.error('Cloudinary upload error:', error);
+                      fs.unlink(tempFilePath, (unlinkError) => {
+                          if (unlinkError) console.warn("Error deleting temporary file after failed upload:", unlinkError);
+                      });
+                      fs.unlink(finalFilePath, (unlinkError) => {
+                          if (unlinkError) console.warn("Error deleting final file:", unlinkError);
+                      });
+                      res.status(500).json({ error: 'Failed to upload image to Cloudinary.' });
+                  });
+
+            } catch (logoError) {
+              console.error("Error adding logo or uploading:", logoError);
+              cloudinary.uploader.upload(tempFilePath, { resource_type: 'image' })
+                        .then(result => {
+                            fs.unlink(tempFilePath, (unlinkError) => {
+                                if (unlinkError) console.warn("Error deleting temporary file:", unlinkError);
+                            });
+                            fs.unlink(finalFilePath, (unlinkError) => {
+                                if (unlinkError) console.warn("Error deleting final file:", unlinkError);
+                            });
+
+                            res.json({
+                                url: result.secure_url,
+                                img: result.secure_url,
+                                app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
+                            });
+                        })
+                        .catch(error => {
+                            console.error('Cloudinary upload error:', error);
+                            fs.unlink(tempFilePath, (unlinkError) => {
+                                if (unlinkError) console.warn("Error deleting temporary file after failed upload:", unlinkError);
+                            });
+                            fs.unlink(finalFilePath, (unlinkError) => {
+                                if (unlinkError) console.warn("Error deleting final file:", unlinkError);
+                            });
+                            res.status(500).json({ error: 'Failed to upload image to Cloudinary.' });
+                        });
+            }
 
         } catch (error) {
             console.error('Error while generating or uploading the image:', error);
@@ -552,7 +626,7 @@ function generateOfflineThreadingId() {
     function combineAndMask(timestamp, randomValue) {
         const shiftedTimestamp = timestamp << BigInt(22);
         const maskedRandom = randomValue & MASK_22_BITS;
-        return (shiftedTimestamp | maskedRandom) & MAX_INT;
+        return (shiftedTimestamp | randomValue) & MAX_INT;
     }
 
     const timestamp = getCurrentTimestamp();
@@ -601,7 +675,6 @@ function extractValue(text, key = null, startStr = null, endStr = '",') {
 
 app.use('/temp/images', express.static(path.join(__dirname, 'temp', 'images')));
 
-// New endpoint to list stored images
 app.get('/temp/images/', (req, res) => {
     fs.readdir(tempImageDir, (err, files) => {
         if (err) {
@@ -609,13 +682,11 @@ app.get('/temp/images/', (req, res) => {
             return res.status(500).json({ error: 'Failed to read directory' });
         }
 
-        // Filter out non-image files if needed
         const imageFiles = files.filter(file => {
             const ext = path.extname(file).toLowerCase();
             return ['.jpg', '.jpeg', '.png', '.gif'].includes(ext);
         });
 
-        // Construct URLs for each image
         const serverURL = process.env.SERVER_URL || 'https://visionary-sliq.onrender.com';
         const imageUrls = imageFiles.map(file => `${serverURL}/temp/images/${file}`);
 
