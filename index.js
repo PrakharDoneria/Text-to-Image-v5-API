@@ -294,7 +294,9 @@ app.post('/prompt', async (req, res) => {
         }
 
         try {
-            const metaAiResponse = await meta_ai_prompt(prompt);
+            // Add "imagine" before the prompt
+            const modifiedPrompt = `imagine ${prompt}`;
+            const metaAiResponse = await meta_ai_prompt(modifiedPrompt);
             if (!metaAiResponse || !metaAiResponse.images || metaAiResponse.images.length === 0) return res.status(500).json({ error: 'Failed to generate image with Meta AI.' });
 
             const imageUrl = metaAiResponse.images[0].url;
