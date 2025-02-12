@@ -12,9 +12,8 @@ import qs from 'qs';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { Jimp } from 'jimp';
-import { fileURLToFilename } from 'url';
 
-const __filename = fileURLToFilename(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
