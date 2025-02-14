@@ -219,19 +219,37 @@ async function addLogo(inputImagePath, logoImagePath, outputImagePath) {
     }
 }
 
-app.get('/cleanall', async (req, res) => {
-  try {
-    const result = await cloudinary.api.delete_all_resources({
-      resource_type: 'all',
-    });
-
-    console.log('Deleted all resources:', result);
-    res.json({ message: 'All resources deleted successfully.' });
-  } catch (error) {
-    console.error('Error deleting resources:', error);
-    res.status(500).json({ error: 'Failed to delete resources.' });
-  }
-});
+app.delete('/cleanall', async (req, res) => {
+    try {
+      const [imageResult, videoResult, rawResult] = await Promise.all([
+        cloudinary.api.delete_all_resources({
+          resource_type: 'image',
+          invalidate: true, // Clear CDN cache
+        }),
+        cloudinary.api.delete_all_resources({
+          resource_type: 'video',
+          invalidate: true,
+        }),
+        cloudinary.api.delete_all_resources({
+          resource_type: 'raw',
+          invalidate: true,
+        }),
+      ]);
+  
+      console.log('Deleted resources:', { imageResult, videoResult, rawResult });
+      res.json({
+        message: 'All resources deleted successfully (images, videos, raw).',
+        results: { imageResult, videoResult, rawResult },
+      });
+    } catch (error) {
+      console.error('Error deleting resources:', error);
+      res.status(500).json({
+        error: 'Failed to delete resources.',
+        details: error.message,
+      });
+    }
+  });
+  
 
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
