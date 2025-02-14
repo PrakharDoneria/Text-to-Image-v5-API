@@ -219,6 +219,20 @@ async function addLogo(inputImagePath, logoImagePath, outputImagePath) {
     }
 }
 
+app.get('/cleanall', async (req, res) => {
+  try {
+    const result = await cloudinary.api.delete_all_resources({
+      resource_type: 'all',
+    });
+
+    console.log('Deleted all resources:', result);
+    res.json({ message: 'All resources deleted successfully.' });
+  } catch (error) {
+    console.error('Error deleting resources:', error);
+    res.status(500).json({ error: 'Failed to delete resources.' });
+  }
+});
+
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
 
