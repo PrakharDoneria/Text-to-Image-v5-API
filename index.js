@@ -249,7 +249,7 @@ app.delete('/cleanall', async (req, res) => {
       });
     }
   });
-  
+
 
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
@@ -353,9 +353,13 @@ app.post('/prompt', async (req, res) => {
                             if (unlinkError) console.warn("Error deleting final file:", unlinkError);
                         });
 
+                        // Construct the desired URL
+                        const parts = result.secure_url.split('/upload/');
+                        const desiredUrl = parts[0] + '/upload/t_watermark/' + parts[1];
+
                         res.json({
-                            url: result.secure_url,
-                            img: result.secure_url,
+                            url: desiredUrl,
+                            img: desiredUrl,
                             app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
                         });
                     })
@@ -381,9 +385,13 @@ app.post('/prompt', async (req, res) => {
                             if (unlinkError) console.warn("Error deleting final file:", unlinkError);
                         });
 
+                        // Construct the desired URL
+                        const parts = result.secure_url.split('/upload/');
+                        const desiredUrl = parts[0] + '/upload/t_watermark/' + parts[1];
+
                         res.json({
-                            url: result.secure_url,
-                            img: result.secure_url,
+                            url: desiredUrl,
+                            img: desiredUrl,
                             app: "https://play.google.com/store/apps/details?id=com.protecgames.verbovisions"
                         });
                     })
