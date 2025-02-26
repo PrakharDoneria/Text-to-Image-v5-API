@@ -433,7 +433,7 @@ app.listen(port, () => {
 });
 
 async function meta_ai_prompt(message, external_conversation_id) {
-    const ok = await updateCookies("datr=p5xIZ0uIlx7zFlyuwDTOuyuG; abra_sess=Fqrb0YWw2%2BoBFjgYDnlBN1U3UU1WeGh5RFp3FoLX4voMAA%3D%3D; wd=1024x1366;");
+    const ok = await updateCookies("datr=p5xIZ0uIlx7zFlyuwDTOuyuG; ps_l=1; ps_n=1; abra_sess=FtKjvbD9u%2F4BFlgYDlZUdUFiYWRKT1ZXdFZBFrzmyvsMAA%3D%3D;v wd=1024x1366;");
     const authPayload = {
         fb_dtsg: ok.dtsg,
         lsd: ok.lsd
@@ -587,7 +587,7 @@ function extractMedia(jsonLine) {
 }
 
 async function animate(media_id, external_conversation_id) {
-    const ok = await updateCookies("datr=p5xIZ0uIlx7zFlyuwDTOuyuG; abra_sess=Fqrb0YWw2%2BoBFjgYDnlBN1U3UU1WeGh5RFp3FoLX4voMAA%3D%3D;");
+    const ok = await updateCookies("datr=p5xIZ0uIlx7zFlyuwDTOuyuG; ps_l=1; ps_n=1; abra_sess=FtKjvbD9u%2F4BFlgYDlZUdUFiYWRKT1ZXdFZBFrzmyvsMAA%3D%3D;v");
     const authPayload = {
         fb_dtsg: ok.dtsg,
         lsd: ok.lsd
