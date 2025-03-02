@@ -250,7 +250,6 @@ app.delete('/cleanall', async (req, res) => {
     }
   });
 
-
 app.post('/prompt', async (req, res) => {
     const { prompt, ip, androidId, uid } = req.body;
 
@@ -315,14 +314,20 @@ app.post('/prompt', async (req, res) => {
             if (androidId) newUser.username = androidId;
             if (uid) newUser.uid = uid;
             await User.create(newUser);
+            user = newUser; // Assign the new user object
         } else {
-            if (user.userType === 'BANNED') return res.status(403).json({ error: 'User is banned. Upgrade to pro to access the service.' });
-            if (user.userType === 'FREE' && user.requestsMade >= 3) return res.status(403).json({ error: 'Daily limit exceeded for free users. Upgrade to pro for unlimited access.' });
-            const now = Date.now();
-            if (user.lastRequestTimestamp && !isSameDay(now, user.lastRequestTimestamp)) user.requestsMade = 0;
-            user.requestsMade++;
-            user.lastRequestTimestamp = now;
-            await user.save();
+            // Special UID Check for Unlimited Access
+            if (uid === '65tGp4IHosUFJgnQhv6GJBD3npO2') {
+                // User with this UID gets unlimited requests
+            } else {
+              if (user.userType === 'BANNED') return res.status(403).json({ error: 'User is banned. Upgrade to pro to access the service.' });
+              if (user.userType === 'FREE' && user.requestsMade >= 3) return res.status(403).json({ error: 'Daily limit exceeded for free users. Upgrade to pro for unlimited access.' });
+              const now = Date.now();
+              if (user.lastRequestTimestamp && !isSameDay(now, user.lastRequestTimestamp)) user.requestsMade = 0;
+              user.requestsMade++;
+              user.lastRequestTimestamp = now;
+              await user.save();
+            }
         }
 
         try {
