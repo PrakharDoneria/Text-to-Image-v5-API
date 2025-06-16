@@ -76,6 +76,31 @@ async function isValidAndroidId(androidId) {
     return true;
 }
 
+app.get('/pusers', async (req, res) => {
+    try {
+        // Find all users where userType is 'PAID' and sort by premiumExpiration in descending order
+        const premiumUsers = await User.find({ userType: 'PAID' })
+                                       .sort({ premiumExpiration: -1 }) // -1 for descending order (latest to old)
+                                       .select('username premiumExpiration'); // Select only relevant fields
+
+        if (!premiumUsers || premiumUsers.length === 0) {
+            return res.status(404).json({ message: 'No premium users found.' });
+        }
+
+        res.status(200).json({
+            message: 'Premium users list (latest to old by expiration date)',
+            count: premiumUsers.length,
+            users: premiumUsers.map(user => ({
+                username: user.username,
+                premiumExpiration: user.premiumExpiration
+            }))
+        });
+    } catch (error) {
+        console.error("Error fetching premium users:", error);
+        res.status(500).json({ error: 'Internal server error. Please try again later.' });
+    }
+});
+
 app.get('/year', async (req, res) => {
     const androidId = req.query.id;
     if (!androidId) return res.status(400).json({ error: 'Android ID is required.' });
