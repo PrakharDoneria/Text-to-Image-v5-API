@@ -463,7 +463,7 @@ app.listen(port, () => {
 });
 
 async function meta_ai_prompt(message, external_conversation_id) {
-    const ok = await updateCookies("datr=p5xIZ0uIlx7zFlyuwDTOuyuG; ps_l=1; ps_n=1; abra_sess=FtKjvbD9u%2F4BFlgYDlZUdUFiYWRKT1ZXdFZBFrzmyvsMAA%3D%3D;v wd=1024x1366;");
+    const ok = await updateCookies("datr=CFdRaRPvAqUdjH_CJ5qpak-q; abra_csrf=N9MLJlfP0xFA_thGmMSqac; ps_l=1; ps_n=1; abra_sess=FuS3i6P20qwCFlQYDlpSeDBJWTRWVllSLWtRFqrdipUNAA%3D%3D; wd=1280x800;");
     const authPayload = {
         fb_dtsg: ok.dtsg,
         lsd: ok.lsd
